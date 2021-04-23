@@ -27,6 +27,11 @@ paths:
       responses:
         '201':
           description: Created
+        '500':
+          description: Internal Error
+        '400':
+          description: The body cannot be empty.
+  /orders-list:
     get:
       summary: Returns the order list.
       parameters:
@@ -71,6 +76,11 @@ paths:
                     type: integer
                     description: The amount of all products together.
                     example: 10
+        responses:
+        '500':
+          description: Internal Error
+        '400':
+          description: The order id must be defined.
     delete:
       summary: "Deletes an order."
       description: "Delete a single order based on id."

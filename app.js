@@ -5,98 +5,129 @@ const winston = require("winston");
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 
+const {
+  OrderModel
+} = require("./models.js");
+const database = require("./database.js");
 const swaggerDocument = YAML.load('./swagger.yaml');
 
-const app = express();
+async function createApp(config) {
+  // async 
+  await database(config.mongoUrl)
 
-// Store the orders in memory
-const orders = [
-  {
-    id: "order_1",
-    products: ["Shorts", "T-Shirt", "Hoodie"],
-    amount: 85
-  },
-  {
-    id: "order_2",
-    products: ["Shoes", "Jacket"],
-    amount: 195
-  },
-  {
-    id: "order_3",
-    products: ["T-Shirt", "Jacket", "Hat"],
-    amount: 130
-  },
-];
+  const app = express();
 
-// Middleware: parse the body to json
-app.use(bodyParser.json());
+  // Middleware: parse the body to json
+  app.use(bodyParser.json());
 
-// Middleware: for request and error logging of express.js
-app.use(
-  expressWinston.logger({
-    transports: [new winston.transports.Console()],
-    format: winston.format.combine(
-    winston.format.colorize(),
-    winston.format.json()
-    ),
-  })
-);
+  // Middleware: for request and error logging of express.js
+  app.use(
+    expressWinston.logger({
+      transports: [new winston.transports.Console()],
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.json()
+      ),
+    })
+  );
 
-// API documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-  
-// REST endpoints
-// CREATE Order
-app.post("/orders", (request, response) => {
-  const order = request.body;
-  orders.push(order);
-  response.json(order);
-});
+  // API documentation
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// UPDATE order
-app.put("/orders/:orderId", (request, response) => {
-  const orderId = request.params.orderId;
+  // REST endpoints
+  // CREATE Order
+  app.post("/orders", async (request, response) => {
+    try {
+      // 1. Get the data
+      const orderData = request.body;
 
-  const updatedOrder = request.body;
+      // 2. Validate the data
+      if (!orderData.id || !orderData.products) {
+        response.status(400).send("The body cannot be empty.") // 400 Bad Request
+      } else {
+        // 3. Create the object in the database
+        // orders.push(order);
+        const createdOrder = await OrderModel.create({
+          id: orderData.id,
+          products: orderData.products
+        })
 
-  let newOrder = null;
-  // update
-  orders.forEach((order, index) => {
-    if (order.id === orderId) {
-      newOrder = {
-        ...orders[index],
-        ...updatedOrder,
-      };
-      orders[index] = newOrder;
+        // 4. Return what we created
+        response.json(createdOrder); // 200 OK
+      }
+    } catch (error) {
+      console.log(error)
+      // 5. Error handling
+      response.status(500).send("Internal Error: Code2345")
     }
   });
 
-  response.json(newOrder);
-});
+  // UPDATE order
+  app.put("/orders/:orderId", (request, response) => {
+    const orderId = request.params.orderId;
 
-// GET order
-app.get("/orders/:orderId", (request, response) => {
-  const orderId = request.params.orderId;
+    const updatedOrder = request.body;
 
-  const order = orders.find((prod) => prod.id === orderId);
+    let newOrder = null;
+    // update
+    orders.forEach((order, index) => {
+      if (order.id === orderId) {
+        newOrder = {
+          ...orders[index],
+          ...updatedOrder,
+        };
+        orders[index] = newOrder;
+      }
+    });
 
-  if (!order) response.status(404);
+    response.json(newOrder);
+  });
 
-  response.json(order);
-});
+  // GET order
+  app.get("/orders/:orderId", async (request, response) => {
+    try {
+      // 1. Get the order id
+      const orderId = request.params.orderId;
 
-// DELETE order
-app.delete('/orders/:orderId', (request, response) => {
-  const orderId = request.params.orderId;
-  const order = orders.find((order) => order.id === orderId);
+      // 2. Validate
+      if (!orderId) {
+        response.status(400).send("Order id ust be defined.")
+      } else {
+        // 3. Get order by id
+        // const order = orders.find((prod) => prod.id === orderId);
+        const myOrder = await OrderModel.find({
+          id: orderId
+        })
 
-  const index = orders.indexOf(order);
-  orders.splice(index, 1);
+        if (!myOrder) {
+          response.status(404);
+        } else {
+          // 4. Send the order back
+          response.json(myOrder);
+        }
+      }
+    } catch (error) {
+      console.log(error)
+      response.status(500).send("Internal Error: ")
+    }
 
-  response.send(order);
-});
+  });
 
-// Orders list
-app.get("/orders", (request, response) => response.json(orders));
+  // DELETE order
+  app.delete('/orders/:orderId', (request, response) => {
+    const orderId = request.params.orderId;
+    const order = orders.find((order) => order.id === orderId);
 
-module.exports = app;
+    const index = orders.indexOf(order);
+    orders.splice(index, 1);
+
+    response.send(order);
+  });
+
+  // Orders list
+  app.get("/orders-list", (request, response) => response.json(orders));
+
+
+}
+
+module.exports = createApp();
